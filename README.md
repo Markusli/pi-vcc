@@ -170,7 +170,7 @@ Config lives at `~/.pi/agent/pi-vcc-config.json` and is created with these defau
 ```
 
 - **`overrideDefaultCompaction`** *(default `true`)*: pi-vcc handles `/pi-vcc`, `/compact` and automatic compactions. With `false` it only handles `/pi-vcc`. Existing config files keep their value.
-- **`smartKeepTail`** *(default `true`)*: if the `keep:1` tail is under 5k tokens, keep as many turns as fit in 20k. An explicit `keep:N` is always respected.
+- **`smartKeepTail`** *(default `true`)*: if the `keep:1` tail is under 5k tokens, keep as many turns as fit in 25k. This is pi-vcc's own limit; Pi's `compaction.keepRecentTokens` does not change it. An explicit `keep:N` is always respected.
 - **`continueAfterThresholdCompact`** *(default `true`)*: after an automatic compaction, tell the agent to carry on instead of stopping. Only used on pi < 0.84.4; newer pi resumes on its own. `false` turns it off everywhere.
 - **`debug`** *(default `false`)*: write details of each compaction (message counts, cut, sections, token calibration) to `/tmp/pi-vcc-debug.json`.
 - **`skipForProviders`** *(default `[]`)*: providers for which pi-vcc steps aside, so another compaction extension can handle them. Compared case-insensitively with Pi's provider id (see `/model`; Grok is `xai`). Checked on every compaction; `/pi-vcc` always runs.

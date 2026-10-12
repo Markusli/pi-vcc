@@ -4,6 +4,8 @@ All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
 ## [Unreleased]
 
+## [0.10.1]
+
 ### Fixes
 
 - **Messages Pi hid from the model stay out of the summary** — since Pi 0.87.0 a failed attempt that Pi retries, or a cut-off reply before overflow recovery, is kept in the session but marked hidden from the model (`context_edit`). pi-vcc read the raw history and put those turns back into the summary; it now uses Pi's own view of the context when a session has such edits. Sessions without them are unchanged. By @mvdbos (#49).

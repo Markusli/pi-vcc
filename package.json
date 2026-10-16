@@ -23,8 +23,12 @@
   "scripts": {
     "typecheck": "tsc --ignoreConfig --noEmit --skipLibCheck --module preserve --moduleResolution bundler --target ES2022 --types node index.ts"
   },
+  "dependencies": {
+    "proper-lockfile": "4.1.2"
+  },
   "devDependencies": {
     "@types/node": "26.6.5",
+    "@types/proper-lockfile": "4.1.0",
     "typescript": "7.0.2"
   },
   "peerDependencies": {

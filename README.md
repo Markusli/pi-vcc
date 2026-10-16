@@ -51,6 +51,7 @@ pi-vcc runs automatically when your context window fills up, or on demand:
 
 - `/pi-vcc` compacts now, keeping the last user turn.
 - `/pi-vcc keep:N [prompt]` keeps the last `N` user turns (`keep:0` compacts everything) and sends the optional prompt to the agent afterwards.
+- `/pi-vcc settings` opens a TUI menu to edit Pi's **global default or per-model auto-compaction threshold**. Choose a model, then set either the context **used-token threshold** or the **headroom reserve**. The menu converts these into Pi's existing `compaction.reserveTokens` / `compaction.modelOverrides` in `settings.json` and reloads them immediately. You can also reset an override to inherit the default. Enter numbers such as `200000`, `200k`, or `1m`; no duplicate pi-vcc threshold setting is created. Per-model settings require Pi 1.2+; earlier versions show the global setting only. Existing project-local Pi compaction overrides take precedence and are flagged by the menu (it edits global settings, not project settings).
 
 With the default `keep:1`, a small tail is grown automatically (see `smartKeepTail`). To leave `/compact` and automatic compactions to Pi core, set `overrideDefaultCompaction: false`.
 

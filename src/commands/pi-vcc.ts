@@ -1,11 +1,19 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { getLastCompactionStats, scheduleCompactionStatsNotify } from "../hooks/before-compact";
 import { buildPiVccCustomInstructions, parseKeepAndPrompt } from "../core/compact-args";
+import { openCompactionSettings } from "./compaction-settings";
 
 export const registerPiVccCommand = (pi: ExtensionAPI) => {
   pi.registerCommand("pi-vcc", {
-    description: "Compact conversation with pi-vcc structured summary",
+    description: "Compact with pi-vcc, or use /pi-vcc settings to edit auto-compaction limits",
+    getArgumentCompletions: (prefix) => "settings".startsWith(prefix.trim().toLowerCase())
+      ? [{ value: "settings", label: "Configure automatic compaction limits" }]
+      : [],
     handler: async (args: string, ctx) => {
+      if (/^(settings|configure)$/i.test(args.trim())) {
+        await openCompactionSettings(ctx);
+        return;
+      }
       const { followUpPrompt, keepUserTurns } = parseKeepAndPrompt(args);
       ctx.compact({
         customInstructions: buildPiVccCustomInstructions(keepUserTurns),

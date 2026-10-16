@@ -46,6 +46,16 @@ function createHarness(sendUserMessage?: (content: string | unknown[]) => unknow
 }
 
 describe("registerPiVccCommand", () => {
+  test("settings subcommand opens the settings UI without triggering compaction", async () => {
+    const { invoke, compactCalls, notifyCalls } = createHarness();
+    // The command harness is deliberately non-interactive. In a live TUI the
+    // same route opens the interactive selectors instead of returning a warning.
+    await invoke("settings");
+    expect(compactCalls).toHaveLength(0);
+    expect(notifyCalls.at(-1)?.level).toBe("warning");
+    expect(notifyCalls.at(-1)?.msg).toContain("interactive UI");
+  });
+
   test("uses the pi-vcc compaction marker", async () => {
     const { invoke, compactCalls } = createHarness();
 

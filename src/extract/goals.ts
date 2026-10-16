@@ -1,79 +1,68 @@
 import type { NormalizedBlock } from "../types";
-import { nonEmptyLines, clip } from "../core/content";
-import { collapseSkillLines } from "../core/skill-collapse";
+import { clip } from "../core/content";
 
-const SCOPE_CHANGE_RE =
-  /\b(instead|actually|change of plan|forget that|new task|switch to|now I want|pivot|let'?s do|stop .* and)\b/i;
+// A compacted goal is a quotation of a user instruction, not an inferred task
+// state. Never promote assistant text, tool output or extension notifications.
+const MAX_QUOTE_CHARS = 320;
+const DIRECTION_RE = /^(?:(?:now|please|instead|actually|next|new task|change of plan|switch to|pivot to|stop .* and)\s*[,.: -]*\s*)?(?:fix|implement|add|create|build|refactor|debug|investigate|update|remove|delete|migrate|deploy|test|write|set up|evaluate|review|analy[sz]e|plan|research|find|prepare)\b/i;
+const EXPLICIT_DIRECTION_RE = /\b(?:your task is to|the task is to|now i want|new research (?:task|direction)|change of plan|switch to|instead of|focus on|let me propose a new idea|actually,? instead)\b/i;
+const QUESTION_RE = /^what if\b/i;
+const NON_DIRECTION_RE = /^(?:ok(?:ay)?|yes|no|sure|continue|go ahead|do it|proceed|keep (?:going|working)|check (?:on )?it|check (?:the )?status|review your original brief|what(?:'s| is) (?:the )?(?:status|progress)|why (?:aren't|are not) you running|thanks|thx)\b/i;
+const APPROVAL_RE = /^(?:go ahead|do it|proceed|approved|yes[, .]|i approve)\b/i;
+const MANDATE_HEADING_RE = /^(?:#{1,6}\s*)?(?:\d+(?:\.\d+)*[.)]?\s+)?(?:scientific |research )?(?:mandate|objective|purpose)(?:\s*[:\-].*)?$/i;
+const METADATA_RE = /^(?:#{1,6}\s*)?(?:handoff\b|date\s*:|repo\s*:|project\s*:|repository\s*:|primary repository\s*:|execution repositories\s*:|audience\s*:|status\s*:)/i;
+const SECTION_RE = /^(?:#{1,6}\s*|\d+[.)]\s+)|^(?:research|review)\s+(?:question|status|summary|background|notes|results|plan|scope|overview|context)\s*:?$/i;
 
-const TASK_RE =
-  /\b(fix|implement|add|create|build|refactor|debug|investigate|update|remove|delete|migrate|deploy|test|write|set up)\b/i;
+const sourceRef = (block: NormalizedBlock): string =>
+  block.sourceIndex === undefined ? "" : ` (#${block.sourceIndex})`;
 
-const NOISE_SHORT_RE = /^(ok|yes|no|sure|yeah|yep|go|hi|hey|thx|thanks|ok\b.*|y|n|k)\s*[.!?]*$/i;
-
-// Reject lines that are clearly not user goals (pasted output, code, paths, tool dumps)
-// or meta-prompt boilerplate (command templates like `/issues` that start with "For each issue:"
-// followed by numbered "Read the issue in full..." steps).
-const NON_GOAL_RE =
-  /^\s*[\[│├└─╭╰]|```|^\s*(=[A-Z]+\(|function |const |let |var |import |export |class )|^(https?:|file:|\/[A-Za-z])|\\n|^\s*For each\b|\bin full\b[^\n]*\b(comments|issue|issues|PRs?|linked)\b/;
-
-// Signals that the rest of the user message is a command template (e.g. /issues),
-// in which case we should stop collecting goals at the signal line.
-const TEMPLATE_SIGNAL_RE =
-  /^\s*(For each\b|Do NOT implement\b|Analyze and propose\b|If Task\/context\b|Output:\s*$)/i;
-
-const truncateAtTemplate = (lines: string[]): string[] => {
-  const idx = lines.findIndex((l) => TEMPLATE_SIGNAL_RE.test(l));
-  return idx >= 0 ? lines.slice(0, idx) : lines;
+const quote = (text: string): string => {
+  const lines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const heading = lines.findIndex((line) => MANDATE_HEADING_RE.test(line));
+  // In a pasted research brief the mandate is generally below a named heading;
+  // dates, paths and repo names appearing before it are not the objective.
+  const taskLine = lines.slice(0, 30).find((line) =>
+    !SECTION_RE.test(line) && !METADATA_RE.test(line) &&
+    (DIRECTION_RE.test(line) || QUESTION_RE.test(line) || EXPLICIT_DIRECTION_RE.test(line)));
+  const substantiveLine = lines.find((line) =>
+    !METADATA_RE.test(line) && !SECTION_RE.test(line));
+  const inlineMandate = heading >= 0 ? lines[heading].match(/^.*?\b(?:mandate|objective|purpose)\s*[:\-]\s*(.+)$/i)?.[1] : undefined;
+  const candidate = heading >= 0 ? inlineMandate ?? lines[heading + 1] : taskLine ?? substantiveLine ?? lines[0];
+  return clip(candidate ?? "", MAX_QUOTE_CHARS).trim();
 };
 
-const stripLeadingBullet = (line: string): string =>
-  line.replace(/^\s*(?:[-*+]|\d+\.)\s+/, "").trim();
-
-const MAX_GOAL_CHARS = 200;
-
-const isSubstantiveGoal = (text: string): boolean => {
-  const t = text.trim();
-  if (t.length <= 5) return false;
-  if (t.length > MAX_GOAL_CHARS) return false;
-  if (NOISE_SHORT_RE.test(t)) return false;
-  if (NON_GOAL_RE.test(t)) return false;
-  return true;
+const directionQuote = (text: string): string => {
+  // Preserve the question itself when an instruction begins with a long preface.
+  const question = text.search(/\bwhat if\b/i);
+  return quote(question >= 0 ? text.slice(question) : text);
 };
 
-// Test scope-change / task intent only on the leading portion of a user block
-// so that pasted outputs below the actual instruction do not trigger matches.
-const LEADING_CHARS = 200;
+const isDirection = (text: string): boolean => {
+  const lead = text.trim().slice(0, 500);
+  if (NON_DIRECTION_RE.test(lead)) return false;
+  return DIRECTION_RE.test(lead) || EXPLICIT_DIRECTION_RE.test(lead) || QUESTION_RE.test(lead);
+};
 
 export const extractGoals = (blocks: NormalizedBlock[]): string[] => {
-  const goals: string[] = [];
-  let latestScopeChange: string[] | null = null;
+  const user = blocks.filter((block): block is Extract<NormalizedBlock, { kind: "user" }> =>
+    block.kind === "user" && quote(block.text).length > 5);
+  if (user.length === 0) return [];
 
-  for (const b of blocks) {
-    if (b.kind !== "user") continue;
-    const rawLines = nonEmptyLines(b.text);
-    const truncated = truncateAtTemplate(rawLines);
-    const lines = collapseSkillLines(truncated.filter(isSubstantiveGoal))
-      .map(stripLeadingBullet)
-      .filter((l) => l.length > 5);
-    if (lines.length === 0) continue;
+  const original = user[0];
+  const later = user.slice(1).filter((block) => isDirection(block.text));
+  const latest = later.at(-1);
 
-    if (goals.length === 0) {
-      goals.push(...lines.slice(0, 6));
-      continue;
+  const result: string[] = [];
+  if (latest && latest.text.trim() !== original.text.trim()) {
+    const proposed = /\blet me propose a new idea\b/i.test(latest.text.slice(0, 500)) || QUESTION_RE.test(latest.text.trim());
+    result.push(`${proposed ? "Latest user proposal" : "Latest substantive user direction"}${sourceRef(latest)}: ${directionQuote(latest.text)}`);
+    if (proposed) {
+      const followUp = user.slice(user.indexOf(latest) + 1).find((block) => APPROVAL_RE.test(block.text.trim()));
+      if (followUp) result.push(`Subsequent user response${sourceRef(followUp)}: ${quote(followUp.text)}`);
     }
-
-    const leading = b.text.slice(0, LEADING_CHARS);
-    if (SCOPE_CHANGE_RE.test(leading)) {
-      latestScopeChange = lines.slice(0, 3).map((l) => clip(l, MAX_GOAL_CHARS));
-    } else if (TASK_RE.test(leading) && lines[0].length > 15) {
-      latestScopeChange = lines.slice(0, 2).map((l) => clip(l, MAX_GOAL_CHARS));
-    }
+    result.push(`Earlier user request${sourceRef(original)} (not necessarily superseded): ${quote(original.text)}`);
+  } else {
+    result.push(`Original user request${sourceRef(original)}: ${quote(original.text)}`);
   }
-
-  // Only emit the [Scope change] marker when we actually captured bullets.
-  if (latestScopeChange && latestScopeChange.length > 0) {
-    goals.push("[Scope change]", ...latestScopeChange);
-  }
-
-  return goals.slice(0, 8);
+  return result;
 };

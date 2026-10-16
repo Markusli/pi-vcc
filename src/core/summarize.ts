@@ -3,12 +3,15 @@ import type { FileOps } from "../types";
 import { normalize } from "./normalize";
 import { filterNoise } from "./filter-noise";
 import { buildSections } from "./build-sections";
+import { extractGoals } from "../extract/goals";
 import { formatSummary, capBrief, capItems, stripCapMarker, BRIEF_MAX_LINES, RECALL_NOTE, wrapLongLines } from "./format";
 import { COMMAND_SEPARATOR, COMMANDS_PER_NAME } from "../extract/tracked-commands";
 import { selectRankedBriefBlocks, type BriefRankingOptions } from "./rank";
 
 export interface CompileInput {
   messages: Message[];
+  /** Authoritative user instructions from the active branch, including older compacted windows. */
+  goalBlocks?: ReturnType<typeof normalize>;
   previousSummary?: string;
   fileOps?: FileOps;
   /**
@@ -203,10 +206,11 @@ const mergeBriefTranscriptWithFreshBudget = (prev: string, fresh: string): strin
   return prevTail ? `${prevTail}\n\n${fresh}` : fresh;
 };
 
-const mergePrevious = (prev: string, fresh: string, options: { preserveFreshBrief?: boolean } = {}): string => {
+const mergePrevious = (prev: string, fresh: string, options: { preserveFreshBrief?: boolean; goalBlocksAuthoritative?: boolean } = {}): string => {
   // Merge header sections
   const headers = HEADER_NAMES
     .map((header) => {
+      if (header === "Session Goal" && options.goalBlocksAuthoritative) return sectionOf(fresh, header);
       const freshSec = sectionOf(fresh, header);
       // The stored summary went through wrapLongLines; rejoin each item's
       // indented continuation lines so the per-section merges, which read
@@ -244,13 +248,14 @@ const compileWithBriefBlocks = (input: CompileInput, options: CompileWithBriefBl
   const blocks = filterNoise(normalize(input.messages, input.sourceIndices));
   const briefBlocks = options.briefBlocksFor?.(blocks);
   const data = buildSections({ blocks, briefBlocks, fileOps: input.fileOps, trackCommands: input.trackCommands });
+  if (input.goalBlocks) data.sessionGoal = extractGoals(filterNoise(input.goalBlocks));
   const fresh = formatSummary(data, { capBriefTranscript: options.capFreshBrief ?? true });
   // Strip any legacy RECALL_NOTE baked into prev summary (pre-fix format)
   // so merge doesn't re-stack it inside the brief.
   const prev = input.previousSummary
     ? stripRecallNote(input.previousSummary)
     : undefined;
-  const merged = prev ? mergePrevious(prev, fresh, { preserveFreshBrief: options.preserveFreshBriefOnMerge }) : fresh;
+  const merged = prev ? mergePrevious(prev, fresh, { preserveFreshBrief: options.preserveFreshBriefOnMerge, goalBlocksAuthoritative: !!input.goalBlocks }) : fresh;
   if (!merged) return "";
   return wrapLongLines(merged + SEPARATOR + RECALL_NOTE);
 };

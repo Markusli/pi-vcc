@@ -60,9 +60,8 @@ On a short session `/pi-vcc` can answer "Nothing to compact yet" whatever `keep:
 
 ```
 [Session Goal]
-- Fix the authentication bug in login flow
-- [Scope change]
-- Also update the session token refresh logic
+- Latest substantive user direction (#8): Also update the session token refresh logic
+- Earlier user request (#0) (not necessarily superseded): Fix the authentication bug in login flow
 
 [Files And Changes]
 - Modified: src/auth/session.ts
@@ -104,7 +103,7 @@ A section only appears when it has something to say; a session with no git commi
 
 | Section | Contents |
 |---|---|
-| `[Session Goal]` | Initial goal and scope changes |
+| `[Session Goal]` | Original user instruction and latest substantive direction, quoting user text and source refs instead of accumulating obsolete goals |
 | `[Files And Changes]` | Files modified, created or read (capped, paths trimmed to a common root) |
 | `[Commits]` | Last 8 commits made in the session (hash + subject) |
 | `[Tracked Commands]` | Recent runs of only the commands listed in `trackCommands` (off by default) |
@@ -112,7 +111,7 @@ A section only appears when it has something to say; a session with no git commi
 | `[User Preferences]` | Lines like "always...", "never...", "prefer..." from user messages |
 | Brief transcript | The conversation in order, about 120 recent lines, each tool call shortened to one line with a `(#N)` ref |
 
-On the next compaction, the sections are merged with the previous summary and re-capped, and the transcript rolls forward.
+On the next compaction, the goal section is reconstructed from user messages in the active session lineage; other sections are merged and re-capped, and the transcript rolls forward. Long pasted handoffs are represented by a task-bearing excerpt where identifiable, or the original handoff instruction. External handoff files are referenced, not parsed. Existing native Pi summaries cannot safely be converted to VCC: automatic compaction defers to Pi in such sessions, while explicit `/pi-vcc` refuses the conversion.
 
 ## Recall
 

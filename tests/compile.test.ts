@@ -34,7 +34,7 @@ describe("compile", () => {
       previousSummary: "[Session Goal]\n- Original goal\n\n---\n\n[user]\nOriginal goal",
     });
     expect(r).toContain("- Original goal");
-    expect(r).toContain("- New task");
+    expect(r).toContain("Original user request (#0): New task");
   });
 
   it("appends brief transcript on merge", () => {

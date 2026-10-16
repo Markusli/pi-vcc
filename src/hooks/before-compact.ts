@@ -613,6 +613,14 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
     const { isPiVcc, keepUserTurns, keepUserTurnsExplicit, followUpPrompt } = parseCompactionInstructions(customInstructions);
     pendingFollowUpPrompt = null;
     if (!isPiVcc && !settings.overrideDefaultCompaction) return;
+    // An existing native checkpoint is not a VCC summary. Replacing it would
+    // silently discard historical context that VCC cannot decode.
+    const previousCompaction: any = [...branchEntries].reverse().find((entry: any) => entry.type === "compaction");
+    if (preparation.previousSummary && previousCompaction?.details?.compactor !== "pi-vcc") {
+      if (!isPiVcc) return;
+      ctx?.ui?.notify?.("pi-vcc: Cannot replace a native Pi checkpoint; start a fresh session", "warning");
+      return { cancel: true };
+    }
     // Provider-level opt-out (#27): defer to the provider's own compaction
     // (e.g. remote compaction via pi-codex-compaction). Checked at call time
     // because the model can change mid-session via /model. Explicit /pi-vcc
@@ -828,6 +836,23 @@ export const registerBeforeCompactHook = (pi: ExtensionAPI, piVersion: string = 
     const RANKED_BRIEF_TOKENS_PER_BLOCK = 15;
     const summary = compileRanked({
       messages,
+      goalBlocks: (() => {
+        // Derive authority from genuine user messages in the active lineage,
+        // not from compacted summaries or custom messages converted to user.
+        // Pi's projection only exposes the current compacted window, so use
+        // the full active lineage and apply its latest context edits directly.
+        const edits = new Map<string, any>();
+        for (const entry of branchEntries as any[]) {
+          if (entry.type === "context_edit") edits.set(entry.targetId, entry.replacement);
+        }
+        return (branchEntries as any[]).flatMap((entry: any) => {
+          if (entry.type !== "message" || entry.message?.role !== "user") return [];
+          const edit = edits.get(entry.id);
+          if (edit === null) return [];
+          const message = edit === undefined ? entry.message : { ...entry.message, content: edit.content };
+          return normalize([message], [globalIndexById?.get(entry.id)]);
+        });
+      })(),
       sourceIndices,
       previousSummary: preparation.previousSummary,
       fileOps: {

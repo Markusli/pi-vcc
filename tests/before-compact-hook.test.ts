@@ -94,6 +94,17 @@ const custom = (id: string, customType: string, content: string | unknown[], ext
 const branchSummary = (id: string, summary: string, fromId = "f1") => ({ id, type: "branch_summary", summary, fromId, timestamp: "2026-01-01T00:00:00.000Z" });
  
 describe("registerBeforeCompactHook: cancel paths", () => {
+  test("native summary is retained by core rather than silently converted", () => {
+    setConfig({ overrideDefaultCompaction: true });
+    const { pi, invokeBefore } = createMockPi();
+    registerBeforeCompactHook(pi);
+    const entries = [msg("m1", "user", "Old mandate"), comp("c1", ""), msg("m2", "user", "New task"), msg("m3", "assistant", "work"), msg("m4", "assistant", "result")];
+    const event = makeEvent(entries);
+    event.preparation.previousSummary = "## Goal\nOlder native checkpoint" as any;
+    expect(invokeBefore(event)).toBeUndefined();
+    expect(invokeBefore({ ...event, customInstructions: PI_VCC_COMPACT_INSTRUCTION })).toEqual({ cancel: true });
+  });
+
   beforeEach(() => {
     if (existsSync(DEBUG_PATH)) unlinkSync(DEBUG_PATH);
   });

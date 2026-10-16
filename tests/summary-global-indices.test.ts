@@ -166,6 +166,7 @@ const compactionEntry = (id: string, firstKeptEntryId: string) => ({
   type: "compaction",
   firstKeptEntryId,
   summary: "prior summary",
+  details: { compactor: "pi-vcc", version: 2 },
 });
 const customEntry = (id: string, content: string) => ({
   id,
@@ -215,6 +216,27 @@ const alphaRead = assistantWithToolCall("read", { file_path: "alpha.txt" });
 const betaEdit = assistantWithToolCall("edit", { file_path: "beta.txt" });
 
 describe("before-compact hook emits session-global refs", () => {
+  test("goal authority survives a second VCC compaction without retaining stale headings", () => {
+    const all = [
+      msgEntry("original", userMsg("Investigate G1 embedding qualification")),
+      msgEntry("first-work", assistantWithToolCall("read", { file_path: "g1.txt" })),
+      msgEntry("first-result", toolResult("read", "first result")),
+      compactionEntry("checkpoint", ""),
+      customEntry("notification", "Background task bg-3 emitted output"),
+      msgEntry("new", userMsg("Evaluate TESSERA as a substitute for topography to reduce unseen-station overfitting")),
+      msgEntry("approval", userMsg("Go ahead")),
+      msgEntry("work", assistantWithToolCall("read", { file_path: "overfitting.txt" })),
+      msgEntry("result", toolResult("read", "new result")),
+    ];
+    const { invoke } = hookHarness(all);
+    const result = invoke(all, { previousSummary: "[Session Goal]\n- Old G1 qualification" });
+    const summary: string = result.compaction.summary;
+    expect(summary).toContain("Latest substantive user direction (#3): Evaluate TESSERA");
+    expect(summary).toContain("Earlier user request (#0) (not necessarily superseded): Investigate G1");
+    expect(summary).not.toContain("Old G1 qualification");
+    expect(summary).not.toContain("Original user request (#4): Go ahead");
+  });
+
   test("second compact-all numbers the edit at its global index", () => {
     const all = [
       msgEntry("m1", userMsg("Inspect the alpha fixture")),

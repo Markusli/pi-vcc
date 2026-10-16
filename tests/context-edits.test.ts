@@ -59,6 +59,27 @@ describe.skipIf(typeof (piCore as any).buildSessionProjection !== "function")("c
     expect(result.summary).toContain("Verified the current configuration.");
   });
 
+  test("authoritative goal uses edited active-lineage user messages across compactions", () => {
+    const session = piCore.SessionManager.inMemory(dir) as any;
+    const original = session.appendMessage({ role: "user", content: [{ type: "text", text: "Inspect old G1 campaign" }], timestamp: 0 });
+    session.appendContextEdit(original, { content: [{ type: "text", text: "Investigate corrected early mandate" }] });
+    const removed = session.appendMessage({ role: "user", content: [{ type: "text", text: "BAD_REMOVED_GOAL" }], timestamp: 0 });
+    session.appendContextEdit(removed, null);
+    session.appendMessage(assistant("Initial research result."));
+    session.appendMessage(assistant("Further research result."));
+    const first = compact(session);
+    session.appendCompaction(first.summary, first.firstKeptEntryId, first.tokensBefore, first.details, true);
+    session.appendMessage({ role: "user", content: [{ type: "text", text: "Evaluate earth embeddings to reduce spatial overfitting" }], timestamp: 0 });
+    session.appendMessage({ role: "user", content: [{ type: "text", text: "go ahead" }], timestamp: 0 });
+    session.appendMessage(assistant("Executed the research."));
+    session.appendMessage(assistant("Completed initial analysis."));
+    const second = compact(session);
+    expect(second.summary).toContain("Investigate corrected early mandate");
+    expect(second.summary).toContain("Evaluate earth embeddings to reduce spatial overfitting");
+    expect(second.summary).not.toContain("BAD_REMOVED_GOAL");
+    expect(second.summary).not.toContain("Inspect old G1 campaign");
+  });
+
   test("the latest replacement is summarized with the original recall index", () => {
     const session = piCore.SessionManager.inMemory(dir) as any;
     session.appendMessage({ role: "user", content: [{ type: "text", text: "Inspect authentication" }], timestamp: 0 });

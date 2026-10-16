@@ -4,6 +4,7 @@ All notable changes to `@sting8k/pi-vcc` are documented in this file.
 
 ## [Unreleased]
 
+- Derive compacted `[Session Goal]` from actual user instructions across the active session lineage rather than merging stale goal rows across compactions. Preserve source refs, distinguish later research directions and proposals, handle long handoffs and context edits, and avoid treating custom notifications as user task authority. A pre-existing native Pi checkpoint is left to Pi rather than silently replaced by VCC.
 - Resolve the default configuration path from Pi's agent directory, respecting the host agent directory when running under Feynman or another Pi host.
 
 ## [0.10.1]
